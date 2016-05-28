@@ -144,13 +144,13 @@ namespace WindowsFormsApplication1
             }
         }
 
-        private void take_passenger(CPassenger passenger, CTicket ticket)
+        private void take_passenger(CPassenger passenger)
         { //приём пассажира на борт
             if (landed)
             { //самолёт не в воздухе
-                if (passengers[ticket.GetSeat()] == null)
+                if (passengers[passenger.GetSeat()] == null)
                 { //место свободно
-                    passengers[ticket.GetSeat()] = passenger;
+                    passengers[passenger.GetSeat()] = passenger;
                     num_engaged++;
                 }
                 else
@@ -204,17 +204,14 @@ namespace WindowsFormsApplication1
         private CAirport end; //конец рейса
         private DateTime takeoff; //время взлета
         private DateTime landing; //время посадки
-        private CPlane plane; //самолет
-        private CTicket[] tickets; //билеты на рейс
 
-        private CFlight(string id, CAirport new_start, CAirport new_end, DateTime new_takeoff, DateTime new_landing)
+        public CFlight(string id, CAirport new_start, CAirport new_end, DateTime new_takeoff, DateTime new_landing)
         { //создание рейса
             name = id;
             start = new_start;
             end = new_end;
             takeoff = new_takeoff;
             landing = new_landing;
-            tickets = new CTicket[100];
 
             Random rand = new Random();
             for (int i = 0; i < 100; i++)
@@ -223,12 +220,11 @@ namespace WindowsFormsApplication1
                 { //вероятность покупки билета - 90%
                     int time = 10 + rand.Next(170);
                     CPassenger pass = new CPassenger(takeoff);
-                    tickets[i] = new CTicket(pass, this, i);
                 }
             }
         }
 
-        private void Delay(int min)
+        public void Delay(int min)
         { //задержать рейс
             takeoff = takeoff.AddMinutes(min);
             landing = landing.AddMinutes(min);
@@ -238,24 +234,30 @@ namespace WindowsFormsApplication1
     public class CPassenger
     {
         private DateTime arrival; //прибытие в аэропорт
-        private CTicket ticket; //билет
+        private CFlight flight;
+        private int seat;
 
         public CPassenger(DateTime new_arrival)
         { //создание пассажира
-            new_arrival = arrival;
+            arrival = new_arrival;
         }
 
-        public void SetTicket(CTicket new_ticket)
+        public void SetTicket(CFlight new_flight)
         {
-            if (ticket == null)
+            if (flight == null)
             {
-                new_ticket = ticket;
+                flight = new_flight;
             }
             else
             {
-                _Exception exc = new _Exception("Зачем чуваку два билета?");
+                _Exception exc = new _Exception("Переопределяешь рейс?");
                 throw (exc);
             }
+        }
+
+        public int GetSeat()
+        {
+            return seat;
         }
     }
 
@@ -267,25 +269,6 @@ namespace WindowsFormsApplication1
         public CAirport(string new_name)
         {
             name = new_name;
-        }
-    }
-
-    public class CTicket
-    {
-        private CPassenger passenger;
-        private CFlight flight;
-        private int seat;
-
-        public CTicket(CPassenger new_passenger, CFlight new_flight, int number)
-        {
-            passenger = new_passenger;
-            flight = new_flight;
-            seat = number;
-        }
-
-        public int GetSeat()
-        {
-            return seat;
         }
     }
 }
