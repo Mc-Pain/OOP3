@@ -18,14 +18,23 @@ namespace WindowsFormsApplication1
             InitializeComponent();
         }
 
+        int num = 6;
         volatile bool working = false;
         static DateTime globaltime = new DateTime(2016, 05, 01);
+        System.Timers.Timer timer = new System.Timers.Timer(100);
+        CAirport[] airports;
+        CPlane[] planes;
+        Random rand = new Random();
+        int flight_no = 0;
 
         private void Init()
         {
-            int num = 6;
-            CAirport[] airports = new CAirport[num];
-            CPlane[] planes = new CPlane[num];
+            Thread thr_model = new Thread(new ThreadStart(Modelling));
+            thr_model.IsBackground = true;
+            Thread thr_time = new Thread(new ThreadStart(Timing));
+            thr_time.IsBackground = true;
+            airports = new CAirport[num];
+            planes = new CPlane[num];
             for (int i = 0; i < num; i++)
             { //создаём аэропорты и самолёты
                 airports[i] = new CAirport(i.ToString());
@@ -33,27 +42,121 @@ namespace WindowsFormsApplication1
 
                 Invoke(new OutputDelegate(Output), new object[] { String.Format("Работа... {0}", globaltime.ToString("f")) });
             }
+            thr_model.Start();
+            thr_time.Start();
+            button1.Text = "Остановить";
         }
 
-        private static void OnTimedEvent(Object source, System.Timers.ElapsedEventArgs e)
-        { 
-            globaltime = globaltime.AddMinutes(10);
+        private void UnInit()
+        {
+            timer.Elapsed -= OnTimedEvent;
+            button1.Text = "Запуск";
+        }
+
+        private void OnTimedEvent(Object source, System.Timers.ElapsedEventArgs e)
+        {
+            globaltime = globaltime.AddMinutes(1);
+            Invoke(new ModellingDelegate(Modelling));
         }
 
         private void Timing()
         {
-            System.Timers.Timer timer = new System.Timers.Timer(500);
             timer.Elapsed += OnTimedEvent;
             timer.Start();
         }
 
         private void Modelling()
         { //здесь будет моделирование
-            while (working)
-            {
-                Invoke(new OutputDelegate(Output), new object[] { String.Format("Работа... {0}", globaltime.ToString("f")) });
+            Invoke(new state_OutputDelegate(state_out), new object[] { false, "" });
+            for (int i = 0; i < num; i++)
+            { //самолёты
+                string label_text = String.Format("Самолет {0}: Рейс:", i);
+
+                if (planes[i].GetFlight() == null)
+                { //если полет не задан
+                    label_text += String.Format(" не задан\n");
+
+                    int PortNext = rand.Next(num);
+                    while (planes[i].GetPort() == airports[PortNext])
+                    { //проверка на случай, если место прибытия и место отправления - один и тот же аэропорт
+                        PortNext = rand.Next(num);
+                    }
+                    DateTime takeoff = globaltime.AddHours(3);
+                    DateTime landing = globaltime.AddMinutes(360 + rand.Next(360));
+
+                    //создаем новый полет и назначаем его
+                    CFlight flight = new CFlight(flight_no.ToString(), planes[i].GetPort(), airports[PortNext], takeoff, landing);
+                    flight_no++;
+
+                    Random rand_ = new Random();
+                    for (int index = 0; index < 100; index++)
+                    { //генерация билетов и пассажиров
+                        if (rand_.Next(100) < rand_.Next(60, 95))
+                        { //вероятность покупки билета - 60-95%
+                            CPassenger pass = new CPassenger(flight, index);
+                            planes[i].take_passenger(pass);
+                        }
+                    }
+
+                    planes[i].setflight(flight);
+                }
+                else
+                { //если полёт уже задан
+                    if (globaltime.AddMinutes(-10) < planes[i].GetFlight().GetLanding())
+                    {
+                        planes[i].GetFlight().GetEnd().busy = true;
+                    }
+
+                    label_text += String.Format("\nИмя: {0}, Место отправления: {1}, Место прибытия: {2}, Время отправления: {3}, Время прибытия: {4}\nСтатус: ",
+                        planes[i].GetFlight().GetName(), planes[i].GetFlight().GetStart().GetName(), planes[i].GetFlight().GetEnd().GetName(),
+                        planes[i].GetFlight().GetTakeOff(), planes[i].GetFlight().GetLanding()); //ойжуть
+
+                    if (planes[i].IsLanded())
+                    {
+                        label_text += String.Format("В аэропорту {0}", planes[i].GetPort().GetName());
+                    }
+                    else
+                    {
+                        label_text += "В воздухе";
+                    }
+
+                    if (planes[i].GetFlight().TakingOff(globaltime))
+                    {
+                        planes[i].Takeoff();
+                        planes[i].GetFlight().GetEnd().SetLandingNext(planes[i]);
+                        label_text += " (Взлёт)";
+                    }
+
+                    if (planes[i].GetFlight().Landing(globaltime))
+                    {
+                        label_text += " (Посадка)";
+                        planes[i].Land(planes[i].GetFlight().GetEnd());
+                        for (int j = 0; j < 100; j++)
+                        { //генерация билетов и пассажиров
+                            planes[i].kick_passenger(j);
+                        }
+                    }
+                    label_text += String.Format(", Число пассажиров: {0}", planes[i].GetEngaged());
+
+                    label_text += "\n";
+                }
+                Invoke(new state_OutputDelegate(state_out), new object[] { true, label_text });
             }
-            Invoke(new OutputDelegate(Output), new object[] { String.Format("Останов {0}", globaltime.ToString("f")) });
+            Invoke(new OutputDelegate(Output), new object[] { String.Format("Текущее время: {0}", globaltime.ToString("f")) });
+        }
+
+        private void state_out(bool flag, string msg)
+        {
+            if (flag)
+            {
+                statelabel.Text += msg + "\n";
+                statelabel.Update();
+            }
+            else
+            {
+                statelabel.Text = msg;
+                statelabel.Update();
+            }
         }
 
         private void Output(string msg)
@@ -64,26 +167,23 @@ namespace WindowsFormsApplication1
 
         private void button1_Click(object sender, EventArgs e)
         {
-            Thread thr_model = new Thread(new ThreadStart(Modelling));
-            thr_model.IsBackground = true;
-            thr_model.Start();
-            Thread thr_time = new Thread(new ThreadStart(Timing));
-            thr_time.IsBackground = true;
-            thr_time.Start();
             working = !working;
             if (working)
             {
                 Init();
-                button1.Text = "Остановить";
             }
             else
             {
-                button1.Text = "Запуск";
+                UnInit();
             }
         }
     }
 
     public delegate void OutputDelegate(string msg);
+
+    public delegate void state_OutputDelegate(bool flag, string msg);
+
+    public delegate void ModellingDelegate();
 
     public class _Exception : Exception
     {
@@ -101,6 +201,16 @@ namespace WindowsFormsApplication1
         private CAirport landed_in;
         private int num_engaged; //занято мест
 
+        public CFlight GetFlight()
+        {
+            return flight;
+        }
+
+        public CAirport GetPort()
+        {
+            return landed_in;
+        }
+
         public CPlane(CAirport airport)
         { //создание самолёта
             landed = true;
@@ -110,7 +220,7 @@ namespace WindowsFormsApplication1
             passengers = new CPassenger[100];
         }
 
-        private void Land(CAirport airport)
+        public void Land(CAirport airport)
         { //приземление
             if (!landed)
             { //самолёт в воздухе
@@ -130,7 +240,7 @@ namespace WindowsFormsApplication1
             }
         }
 
-        private void Takeoff()
+        public void Takeoff()
         { //взлёт
             if (landed)
             { //самолёт не в воздухе
@@ -144,7 +254,7 @@ namespace WindowsFormsApplication1
             }
         }
 
-        private void take_passenger(CPassenger passenger)
+        public void take_passenger(CPassenger passenger)
         { //приём пассажира на борт
             if (landed)
             { //самолёт не в воздухе
@@ -166,7 +276,7 @@ namespace WindowsFormsApplication1
             }
         }
 
-        private void kick_passenger(int seat)
+        public void kick_passenger(int seat)
         { //высадка пассажиров
             if (landed)
             { //самолёт не в воздухе
@@ -183,7 +293,7 @@ namespace WindowsFormsApplication1
             }
         }
 
-        private void setflight(CFlight new_flight)
+        public void setflight(CFlight new_flight)
         { //установка нового рейса
             if (flight != null)
             { //рейс уже установлен
@@ -195,6 +305,16 @@ namespace WindowsFormsApplication1
                 flight = new_flight;
             }
         }
+
+        public int GetEngaged()
+        {
+            return num_engaged;
+        }
+
+        public bool IsLanded()
+        {
+            return landed;
+        }
     }
 
     public class CFlight
@@ -205,6 +325,30 @@ namespace WindowsFormsApplication1
         private DateTime takeoff; //время взлета
         private DateTime landing; //время посадки
 
+        public bool TakingOff(DateTime globaltime)
+        {
+            if (DateTime.Compare(takeoff, globaltime) == 0)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        public bool Landing(DateTime globaltime)
+        {
+            if (DateTime.Compare(landing, globaltime) == 0)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
         public CFlight(string id, CAirport new_start, CAirport new_end, DateTime new_takeoff, DateTime new_landing)
         { //создание рейса
             name = id;
@@ -212,16 +356,6 @@ namespace WindowsFormsApplication1
             end = new_end;
             takeoff = new_takeoff;
             landing = new_landing;
-
-            Random rand = new Random();
-            for (int i = 0; i < 100; i++)
-            { //генерация билетов и пассажиров
-                if (rand.Next(100) < 90)
-                { //вероятность покупки билета - 90%
-                    int time = 10 + rand.Next(170);
-                    CPassenger pass = new CPassenger(takeoff);
-                }
-            }
         }
 
         public void Delay(int min)
@@ -229,30 +363,42 @@ namespace WindowsFormsApplication1
             takeoff = takeoff.AddMinutes(min);
             landing = landing.AddMinutes(min);
         }
+
+        public DateTime GetTakeOff()
+        {
+            return takeoff;
+        }
+
+        public DateTime GetLanding()
+        {
+            return landing;
+        }
+
+        public string GetName()
+        {
+            return name;
+        }
+
+        public CAirport GetEnd()
+        {
+            return end;
+        }
+
+        public CAirport GetStart()
+        {
+            return start;
+        }
     }
 
     public class CPassenger
     {
-        private DateTime arrival; //прибытие в аэропорт
         private CFlight flight;
         private int seat;
 
-        public CPassenger(DateTime new_arrival)
+        public CPassenger(CFlight new_flight, int new_seat)
         { //создание пассажира
-            arrival = new_arrival;
-        }
-
-        public void SetTicket(CFlight new_flight)
-        {
-            if (flight == null)
-            {
-                flight = new_flight;
-            }
-            else
-            {
-                _Exception exc = new _Exception("Переопределяешь рейс?");
-                throw (exc);
-            }
+            flight = new_flight;
+            seat = new_seat;
         }
 
         public int GetSeat()
@@ -263,12 +409,33 @@ namespace WindowsFormsApplication1
 
     public class CAirport
     {
+        private CPlane landing;
         private string name;
         public bool busy = false;
 
         public CAirport(string new_name)
         {
             name = new_name;
+        }
+
+        public CPlane LandingNext()
+        {
+            return landing;
+        }
+
+        public void SetLandingNext(CPlane plane)
+        {
+            landing = plane;
+        }
+
+        public string GetName()
+        {
+            return name;
+        }
+
+        public bool Busy()
+        {
+            return busy;
         }
     }
 }
