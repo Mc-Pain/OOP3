@@ -6,3 +6,6 @@ D:\Student\Labs\OOP\OOP3\WindowsFormsApplication1\obj\Debug\WindowsFormsApplicat
 D:\Student\Labs\OOP\OOP3\WindowsFormsApplication1\obj\Debug\WindowsFormsApplication1.csproj.GenerateResource.Cache
 D:\Student\Labs\OOP\OOP3\WindowsFormsApplication1\obj\Debug\WindowsFormsApplication1.exe
 D:\Student\Labs\OOP\OOP3\WindowsFormsApplication1\obj\Debug\WindowsFormsApplication1.pdb
+C:\Users\vdid1\Documents\Visual Studio 2013\Projects\oop3\OOP3\WindowsFormsApplication1\bin\Debug\WindowsFormsApplication1.exe.config
+C:\Users\vdid1\Documents\Visual Studio 2013\Projects\oop3\OOP3\WindowsFormsApplication1\obj\Debug\WindowsFormsApplication1.exe
+C:\Users\vdid1\Documents\Visual Studio 2013\Projects\oop3\OOP3\WindowsFormsApplication1\obj\Debug\WindowsFormsApplication1.pdb
