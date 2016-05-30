@@ -18,7 +18,7 @@ namespace WindowsFormsApplication1
             InitializeComponent();
         }
 
-        int num = 6;
+        int planescount, minprob, maxprob, seats;
         volatile bool working = false;
         static DateTime globaltime = new DateTime(2016, 05, 01);
         System.Timers.Timer timer = new System.Timers.Timer(100);
@@ -27,18 +27,48 @@ namespace WindowsFormsApplication1
         Random rand = new Random();
         int flight_no = 0;
 
+        private bool Check()
+        {
+            if (!int.TryParse(textBox1.Text, out planescount) && (planescount < 1 || planescount > 20))
+            {
+                label5.Text = "Неверное кол-во самолетов/аэропортов (макс. 20)";
+                return false;
+            }
+            if (!int.TryParse(textBox2.Text, out minprob) && (minprob < 1 || minprob > 100))
+            {
+                label5.Text = "Неверная минимальная вероятность";
+                return false;
+            }
+            if (!int.TryParse(textBox3.Text, out maxprob) && (maxprob < 1 || maxprob > 100))
+            {
+                label5.Text = "Неверная максимальная вероятность";
+                return false;
+            }
+            if (!int.TryParse(textBox4.Text, out seats) && seats < 1)
+            {
+                label5.Text = "Неверное число мест";
+                return false;
+            }
+            if (maxprob < minprob)
+            {
+                label5.Text = "Минимум больше максимума";
+                return false;
+            }
+            return true;
+        }
+
         private void Init()
         {
             Thread thr_model = new Thread(new ThreadStart(Modelling));
             thr_model.IsBackground = true;
             Thread thr_time = new Thread(new ThreadStart(Timing));
             thr_time.IsBackground = true;
-            airports = new CAirport[num];
-            planes = new CPlane[num];
-            for (int i = 0; i < num; i++)
+            airports = new CAirport[planescount];
+            planes = new CPlane[planescount];
+            for (int i = 0; i < planescount; i++)
             { //создаём аэропорты и самолёты
                 airports[i] = new CAirport(i.ToString());
-                planes[i] = new CPlane(airports[i]);
+                planes[i] = new CPlane(airports[i], seats);
 
                 Invoke(new OutputDelegate(Output), new object[] { String.Format("Работа... {0}", globaltime.ToString("f")) });
             }
@@ -67,95 +97,107 @@ namespace WindowsFormsApplication1
 
         private void Modelling()
         { //здесь будет моделирование
-            Invoke(new state_OutputDelegate(state_out), new object[] { false, "" });
-            for (int i = 0; i < num; i++)
-            { //самолёты
-                string label_text = String.Format("Самолет {0}: Рейс:", i);
+            try
+            {
+                Invoke(new state_OutputDelegate(state_out), new object[] { false, "" });
+                for (int i = 0; i < planescount; i++)
+                { //самолёты
+                    string label_text = String.Format("Самолет {0}: Рейс:", i);
 
-                if (planes[i].GetFlight() == null)
-                { //если полет не задан
-                    label_text += String.Format(" не задан\n");
+                    if (planes[i].GetFlight() == null)
+                    { //если полет не задан
+                        label_text += String.Format(" не задан\r\n");
 
-                    int PortNext = rand.Next(num);
-                    while (planes[i].GetPort() == airports[PortNext])
-                    { //проверка на случай, если место прибытия и место отправления - один и тот же аэропорт
-                        PortNext = rand.Next(num);
-                    }
-                    DateTime takeoff = globaltime.AddHours(3);
-                    DateTime landing = globaltime.AddMinutes(360 + rand.Next(360));
-
-                    //создаем новый полет и назначаем его
-                    CFlight flight = new CFlight(flight_no.ToString(), planes[i].GetPort(), airports[PortNext], takeoff, landing);
-                    flight_no++;
-
-                    Random rand_ = new Random();
-                    for (int index = 0; index < 100; index++)
-                    { //генерация билетов и пассажиров
-                        if (rand_.Next(100) < rand_.Next(60, 95))
-                        { //вероятность покупки билета - 60-95%
-                            CPassenger pass = new CPassenger(flight, index);
-                            planes[i].take_passenger(pass);
+                        int PortNext = rand.Next(planescount);
+                        while (planes[i].GetPort() == airports[PortNext])
+                        { //проверка на случай, если место прибытия и место отправления - один и тот же аэропорт
+                            PortNext = rand.Next(planescount);
                         }
-                    }
+                        DateTime takeoff = globaltime.AddHours(3);
+                        DateTime landing = globaltime.AddMinutes(360 + rand.Next(360));
 
-                    planes[i].setflight(flight);
-                }
-                else
-                { //если полёт уже задан
-                    if (globaltime.AddMinutes(-10) < planes[i].GetFlight().GetLanding())
-                    {
-                        planes[i].GetFlight().GetEnd().busy = true;
-                    }
+                        //создаем новый полет и назначаем его
+                        CFlight flight = new CFlight(flight_no.ToString(), planes[i].GetPort(), airports[PortNext], takeoff, landing);
+                        flight_no++;
 
-                    label_text += String.Format("\nИмя: {0}, Место отправления: {1}, Место прибытия: {2}, Время отправления: {3}, Время прибытия: {4}\nСтатус: ",
-                        planes[i].GetFlight().GetName(), planes[i].GetFlight().GetStart().GetName(), planes[i].GetFlight().GetEnd().GetName(),
-                        planes[i].GetFlight().GetTakeOff(), planes[i].GetFlight().GetLanding()); //ойжуть
+                        Random rand_ = new Random();
+                        for (int index = 0; index < seats; index++)
+                        { //генерация билетов и пассажиров
+                            if (rand_.Next(100) < rand_.Next(minprob, maxprob))
+                            {
+                                CPassenger pass = new CPassenger(flight, index);
+                                planes[i].take_passenger(pass);
+                            }
+                        }
 
-                    if (planes[i].IsLanded())
-                    {
-                        label_text += String.Format("В аэропорту {0}", planes[i].GetPort().GetName());
+                        planes[i].setflight(flight);
                     }
                     else
-                    {
-                        label_text += "В воздухе";
-                    }
-
-                    if (planes[i].GetFlight().TakingOff(globaltime))
-                    {
-                        planes[i].Takeoff();
-                        planes[i].GetFlight().GetEnd().SetLandingNext(planes[i]);
-                        label_text += " (Взлёт)";
-                    }
-
-                    if (planes[i].GetFlight().Landing(globaltime))
-                    {
-                        label_text += " (Посадка)";
-                        planes[i].Land(planes[i].GetFlight().GetEnd());
-                        for (int j = 0; j < 100; j++)
-                        { //генерация билетов и пассажиров
-                            planes[i].kick_passenger(j);
+                    { //если полёт уже задан
+                        if (globaltime.AddMinutes(-10) < planes[i].GetFlight().GetLanding())
+                        {
+                            planes[i].GetFlight().GetEnd().busy = true;
                         }
-                    }
-                    label_text += String.Format(", Число пассажиров: {0}", planes[i].GetEngaged());
 
-                    label_text += "\n";
+                        label_text += String.Format("\r\nИмя: {0}, Место отправления: {1}, Место прибытия: {2}\r\nВремя отправления: {3}, Время прибытия: {4}\r\nСтатус: ",
+                            planes[i].GetFlight().GetName(), planes[i].GetFlight().GetStart().GetName(), planes[i].GetFlight().GetEnd().GetName(),
+                            planes[i].GetFlight().GetTakeOff(), planes[i].GetFlight().GetLanding()); //ойжуть
+
+                        if (planes[i].IsLanded())
+                        {
+                            label_text += String.Format("В аэропорту {0}", planes[i].GetPort().GetName());
+                        }
+                        else
+                        {
+                            label_text += "В воздухе";
+                        }
+
+                        if (planes[i].GetFlight().TakingOff(globaltime))
+                        {
+                            planes[i].Takeoff();
+                            planes[i].GetFlight().GetEnd().SetLandingNext(planes[i]);
+                            label_text += " (Взлёт)";
+                        }
+
+                        if (planes[i].GetFlight().Landing(globaltime))
+                        {
+                            label_text += " (Посадка)";
+                            planes[i].Land(planes[i].GetFlight().GetEnd());
+                            for (int j = 0; j < seats; j++)
+                            { //генерация билетов и пассажиров
+                                planes[i].kick_passenger(j);
+                            }
+                        }
+                        label_text += String.Format(", Число пассажиров: {0}", planes[i].GetEngaged());
+
+                        label_text += "\r\n";
+                    }
+                    Invoke(new state_OutputDelegate(state_out), new object[] { true, label_text });
                 }
-                Invoke(new state_OutputDelegate(state_out), new object[] { true, label_text });
+                Invoke(new OutputDelegate(Output), new object[] { String.Format("Текущее время: {0}", globaltime.ToString("f")) });
             }
-            Invoke(new OutputDelegate(Output), new object[] { String.Format("Текущее время: {0}", globaltime.ToString("f")) });
+            catch (_Exception e)
+            {
+                Invoke(new OutputDelegate(catcher), new object[] { e.Get() });
+            }
+        }
+
+        private void catcher(string msg)
+        {
+            label5.Text += msg;
         }
 
         private void state_out(bool flag, string msg)
         {
             if (flag)
             {
-                statelabel.Text += msg + "\n";
-                statelabel.Update();
+                state.Text += msg + "\r\n";
+                state.Update();
             }
             else
             {
-                statelabel.Text = msg;
-                statelabel.Update();
+                state.Text = msg;
+                state.Update();
             }
         }
 
@@ -167,14 +209,17 @@ namespace WindowsFormsApplication1
 
         private void button1_Click(object sender, EventArgs e)
         {
-            working = !working;
-            if (working)
+            if (Check())
             {
-                Init();
-            }
-            else
-            {
-                UnInit();
+                working = !working;
+                if (working)
+                {
+                    Init();
+                }
+                else
+                {
+                    UnInit();
+                }
             }
         }
     }
@@ -187,9 +232,15 @@ namespace WindowsFormsApplication1
 
     public class _Exception : Exception
     {
+        string usermsg;
         public _Exception(string message)
         {
+            usermsg = message;
+        }
 
+        public string Get()
+        {
+            return usermsg;
         }
     }
 
@@ -211,13 +262,13 @@ namespace WindowsFormsApplication1
             return landed_in;
         }
 
-        public CPlane(CAirport airport)
+        public CPlane(CAirport airport, int seats)
         { //создание самолёта
             landed = true;
             landed_in = airport;
             num_engaged = 0;
             flight = null;
-            passengers = new CPassenger[100];
+            passengers = new CPassenger[seats];
         }
 
         public void Land(CAirport airport)
